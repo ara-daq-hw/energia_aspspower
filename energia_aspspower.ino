@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <MspFlash.h>
 
+#define VERSION_STRING "1.0.0"
 
 #define CURRENT P4_4
 #define VIN_MON P4_5
@@ -364,6 +365,16 @@ void parseJsonInput() {
     }
     Flash.erase(SEGMENT_B);
     Flash.write(SEGMENT_B, tmp_default, sizeof(tmp_default));
+  }
+  if (root.containsKey("sn")) {
+    Serial.print("{\"sn\":");
+    Serial.print(calib[30]);
+    Serial.println("}");
+  }
+  if (root.containsKey("fw")) {
+    Serial.print("{\"fw\":\"");
+    Serial.print(VERSION_STRING);
+    Serial.println("\"}");
   }
   if (root.containsKey("calib")) {
     int tmp_calib[32];
