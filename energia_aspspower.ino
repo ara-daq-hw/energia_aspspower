@@ -351,8 +351,10 @@ void parseJsonInput() {
     }
   }
   if (root.containsKey("disable")) {
-    unsigned char tmp_default[4] = { 0, 0, 0, 0};
+    unsigned char tmp_default[64];
     JsonArray& disableArray = root["disable"];
+    memset(tmp_default, 0, sizeof(tmp_default));
+    tmp_default[63] = DEFAULT_DISABLE_SIGNATURE;
     for (size_t i=0;i<disableArray.size();i++) {
       unsigned int ch;
       ch = disableArray[i];
@@ -361,7 +363,7 @@ void parseJsonInput() {
       }
     }
     Flash.erase(SEGMENT_B);
-    Flash.write(SEGMENT_B, tmp_default, 4);
+    Flash.write(SEGMENT_B, tmp_default, sizeof(tmp_default));
   }
   if (root.containsKey("calib")) {
     int tmp_calib[32];
