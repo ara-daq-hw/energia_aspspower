@@ -6,11 +6,15 @@
 #define CURRENT P4_4
 #define VIN_MON P4_5
 #define SERIAL_SELECT P2_1
+#define UPIVS_CLK P1_4
+#define UPIVS_SDO P1_5
 
-const unsigned char __attribute__((section(".infob"))) default_disable[4] = { 0, 0, 0, 0 };
+// Both of these have signatures to make sure they're valid.
+unsigned char *const default_disable = SEGMENT_B;
+#define DEFAULT_DISABLE_SIGNATURE 0x55
+int *const calib = (int *) SEGMENT_D;
+#define CALIB_SIGNATURE 0x55AA
 
-const int __attribute__((section("infod"))) calib[32] = { 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
-                                                          0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 };
 char __attribute__((section(".noinit"))) cmd_buffer[128];
 unsigned char cmd_buffer_ptr = 0;
 
@@ -39,6 +43,21 @@ unsigned char current_average_count = 0;
 int current_measure[4] = { 0, 0, 0, 0};
 unsigned int current_temp = 0;
 unsigned int last_voltage = 0;
+
+// It takes ~half a second to enter sleep mode. Wait double that.
+#define UPIVS_WAIT_PERIOD 1000
+// After we wake up, we need to check for SDO low (data ready). Check quickly.
+#define UPIVS_CHECK_PERIOD 1
+// After that, the clock period is mainly set by the optocoupler, so set that
+// to around 10 ms.
+#define UPIVS_BIT_PERIOD 10
+#define UPIVS_CLK_HIGH 1
+#define UPIVS_CLK_LOW 0
+
+unsigned long upivsTime = 0;
+unsigned int upivsBitCount = 0;
+unsigned int upivs_temp = 0;
+unsigned int upivs_last_voltage = 0;
 
 unsigned int readVin() {
   return analogRead(VIN_MON);
@@ -94,48 +113,6 @@ void readCurrent() {
   }
 }
 
-void setup()
-{  
-  unsigned char err;
-
-  // Add something here to grab data from info flash to determine if
-  // we let all of them turn on.
-  for (unsigned int i=0;i<4;i++) {
-    if (default_disable[i]) {
-      digitalWrite(enables[i], 0);
-      pinMode(enables[i], OUTPUT);
-    } else {
-      pinMode(enables[i], INPUT);
-    }
-  }
-  // Switch P2_1 to go to 15V_SW1_SENSE
-  pinMode(SERIAL_SELECT, OUTPUT);
-  digitalWrite(SERIAL_SELECT, 1);
-  // Set up the OA.
-
-  // OA0 is just a unity-gain follower on VIN_MON.
-  OA0CTL1 = (OAFC_2);
-  // Slow slew, output to external pin A12.
-  OA0CTL0 = (OAPM_1) | (OAADC0) | (OAADC1);
-  // OA1 is a general-purpose op-amp.
-  OA1CTL1 = (OAFC_0);
-  // start with channel 0.
-  OA1CTL0 = (OAN_1) | (OAP_0) | (OAPM_1) | (OAADC0) | (OAADC1);
-  currentTime = millis();
-
-  Serial.begin(9600);
-  Serial.println("{\"log\":\"reboot\"}");
-  Wire.begin();
-  Wire.beginTransmission(0x4C);
-  Wire.write(0x09);
-  Wire.write(0x4);
-  err = Wire.endTransmission();
-  if (err) {
-	  Serial.print("{\"dbg\":\"I2C err\"}");
-  }
-  housekeepingTime = millis() + HOUSEKEEPING_PERIOD;
-}
-
 char readTMP422(unsigned int ch) {
 	unsigned int tmp;
 	unsigned char err;
@@ -151,6 +128,52 @@ char readTMP422(unsigned int ch) {
 	if (Wire.available()) tmp = Wire.read();
 	tmp -= 64;
 	return tmp;
+}
+
+void doVinReadout() {
+  if (digitalRead(UPIVS_CLK) == UPIVS_CLK_HIGH) {
+    // Clock is high.
+    if (upivsBitCount == 0) {
+      // need to wakeup
+      digitalWrite(UPIVS_CLK, UPIVS_CLK_LOW);
+      upivsTime = millis() + UPIVS_CHECK_PERIOD;
+      upivs_temp = 0;
+      return;
+    } else {
+      if (digitalRead(UPIVS_SDO) == 1)
+        upivs_temp = upivs_temp << 1;
+      else
+        upivs_temp = (upivs_temp << 1) | 0x1;
+  
+      if (upivsBitCount == 16) {
+        upivs_last_voltage = upivs_temp;
+      }
+      if (upivsBitCount == 27) {
+        // Leave clock high, let it go to sleep.
+        upivsTime = millis() + UPIVS_WAIT_PERIOD;
+        upivsBitCount = 0;
+        return;
+      }
+      digitalWrite(UPIVS_CLK,UPIVS_CLK_LOW);
+      upivsTime = millis() + UPIVS_BIT_PERIOD;
+    }
+  } else {
+    if (upivsBitCount == 0) {
+      if (digitalRead(UPIVS_SDO) == 1) {
+        // Ready!
+        digitalWrite(UPIVS_CLK, UPIVS_CLK_HIGH);
+        upivsTime = millis() + UPIVS_BIT_PERIOD;
+        upivsBitCount++;
+        return;
+      }
+      upivsTime = millis() + UPIVS_CHECK_PERIOD;
+      return;
+    }
+    // Clock is low. Raise it.
+    digitalWrite(UPIVS_CLK, UPIVS_CLK_HIGH);
+    upivsTime = millis() + UPIVS_BIT_PERIOD;
+    upivsBitCount++;
+  }
 }
 
 void doHousekeeping() {
@@ -177,6 +200,8 @@ void doHousekeeping() {
       Serial.print(last_voltage);
       Serial.print(",");
       Serial.print(analogRead(128+11));
+      Serial.print(",");
+      Serial.print(upivs_last_voltage);
       Serial.println("]}");
       housekeepingState = output_I;
       break;
@@ -204,8 +229,85 @@ void doHousekeeping() {
   housekeepingTime = millis() + HOUSEKEEPING_PERIOD;
 }
 
+/////////////////////////////////////////
+//               SETUP                 //
+/////////////////////////////////////////
+void setup()
+{  
+  unsigned char err=0;
+
+  if (default_disable[63] != DEFAULT_DISABLE_SIGNATURE) {
+    unsigned char tmp[64];
+    memset(tmp, 0, sizeof(tmp));
+    tmp[63] = DEFAULT_DISABLE_SIGNATURE;
+    Flash.erase(default_disable);
+    Flash.write(default_disable, (unsigned char *) tmp, 64);
+    err++;
+  }
+  // Add something here to grab data from info flash to determine if
+  // we let all of them turn on.
+  for (unsigned int i=0;i<4;i++) {
+    if (default_disable[i]) {
+      digitalWrite(enables[i], 0);
+      pinMode(enables[i], OUTPUT);
+    } else {
+      pinMode(enables[i], INPUT);
+    }
+  }
+  // Switch P2_1 to go to 15V_SW1_SENSE
+  pinMode(SERIAL_SELECT, OUTPUT);
+  digitalWrite(SERIAL_SELECT, 1);
+  // Switch reference to 2.5V internal.
+  analogReference(INTERNAL2V5);
+  // Drive CLK low (P1.2) - it becomes high on the other side of the optocoupler.
+  // We keep the ADS1244 in sleep, and wake it up.
+  pinMode(UPIVS_CLK, OUTPUT);
+  digitalWrite(UPIVS_CLK, UPIVS_CLK_HIGH);  
+  // Set up the OA.
+
+  // OA0 is just a unity-gain follower on VIN_MON.
+  OA0CTL1 = (OAFC_2);
+  // Slow slew, output to external pin A12.
+  OA0CTL0 = (OAPM_1) | (OAADC0) | (OAADC1);
+  // OA1 is a general-purpose op-amp.
+  OA1CTL1 = (OAFC_0);
+  // start with channel 0.
+  OA1CTL0 = (OAN_1) | (OAP_0) | (OAPM_1) | (OAADC0) | (OAADC1);
+  if (calib[31] != CALIB_SIGNATURE) {
+    int tmp[32];
+    memset(tmp, 0, sizeof(tmp));
+    tmp[31] = CALIB_SIGNATURE;
+    Flash.erase((unsigned char *) calib);
+    Flash.write((unsigned char *) calib, (unsigned char *) tmp, 64);
+    err++;
+  }
+  
+  // Now boot.
+  Serial.begin(9600);
+  if (err)
+    Serial.println("{\"log\":\"initial boot\"}");
+  else
+    Serial.println("{\"log\":\"reboot\"}");
+
+
+  Wire.begin();
+  Wire.beginTransmission(0x4C);
+  Wire.write(0x09);
+  Wire.write(0x4);
+  err = Wire.endTransmission();
+  if (err) {
+	  Serial.print("{\"dbg\":\"I2C err\"}");
+  }
+  currentTime = millis();
+  housekeepingTime = millis() + HOUSEKEEPING_PERIOD;
+  upivsBitCount = 26;
+}
+
 void loop()
 {
+  if ((long) (millis() - upivsTime) > 0)
+    doVinReadout();
+
   if ((long) (millis() - currentTime) > 0)
     readCurrent();
 
@@ -274,6 +376,8 @@ void parseJsonInput() {
     val = calibArray[1];
     Serial.print("{\"log\":\"update cal");
     Serial.print(ch);
+    Serial.print(" from ");
+    Serial.print(calib[ch]);
     Serial.print(" to ");
     Serial.print(val);
     Serial.println("\"}");
