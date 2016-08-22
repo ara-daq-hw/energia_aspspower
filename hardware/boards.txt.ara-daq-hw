@@ -1,0 +1,57 @@
+##############################################################
+aspsheater_revf.name=ASPS-DAQ Heater revF w/ msp430fr5739
+aspsheater_revf.board=MSP430_ASPSHEATER_REVF
+aspsheater_revf.upload.protocol=rf2500
+aspsheater_revf.upload.tool=mspdebug
+aspsheater_revf.upload.maximum_size=15872
+aspsheater_revf.build.mcu=msp430fr5739
+aspsheater_revf.build.f_cpu=16000000L
+aspsheater_revf.build.core=msp430
+aspsheater_revf.build.variant=aspsheater_fr5739_revf
+aspsheater_revf.upload.maximum_ram_size=17408
+aspsheater_revf.vid.0=0x2341
+aspsheater_revf.pid.0=0x0c9f
+
+##############################################################
+aspsheater_revg.name=ASPS-DAQ Heater revG w/ msp430fr5739
+aspsheater_revg.board=MSP430_ASPSHEATER_REVG
+aspsheater_revg.upload.protocol=rf2500
+aspsheater_revg.upload.tool=mspdebug
+aspsheater_revg.upload.maximum_size=15872
+aspsheater_revg.build.mcu=msp430fr5739
+aspsheater_revg.build.f_cpu=16000000L
+aspsheater_revg.build.core=msp430
+aspsheater_revg.build.variant=aspsheater_fr5739_revg
+aspsheater_revg.upload.maximum_ram_size=17408
+aspsheater_revg.vid.0=0x2341
+aspsheater_revg.pid.0=0x0c9f
+
+##############################################################
+tiscv2.name=TISCv2 w/ msp430fr5987
+tiscv2.board=MSP430_TISCV2
+tiscv2.upload.tool=mspdebug
+tiscv2.upload.protocol=rf2500
+tiscv2.upload.maximum_size=64512
+tiscv2.build.mcu=msp430fr5987
+tiscv2.build.f_cpu=8000000L
+tiscv2.build.core=msp430
+tiscv2.build.variant=tiscv2_fr5987
+tiscv2.upload.maximum_ram_size=2048
+tiscv2.vid.0=0x2341
+tiscv2.pid.0=0x0c9f
+
+##############################################################
+aspspower.name=ASPS-POWER w/ msp430f2274
+aspspower.board=MSP430_ASPSPOWER
+aspspower.upload.tool=mspdebug
+aspspower.upload.protocol=rf2500
+aspspower.upload.maximum_size=32768
+aspspower.build.mcu=msp430f2274
+aspspower.build.f_cpu=16000000L
+aspspower.build.core=msp430
+aspspower.build.variant=aspspower_f2274
+aspspower.upload.maximum_ram_size=1024
+aspspower.vid.0=0x2341
+aspspower.pid.0=0x0c9f
+
+##############################################################
