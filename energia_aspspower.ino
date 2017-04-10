@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include <MspFlash.h>
 
-#define VERSION_STRING "1.0.0"
+#define VERSION_STRING "1.1.0"
 
 #define CURRENT P4_4
 #define VIN_MON P4_5
@@ -66,6 +66,9 @@ unsigned int readVin() {
 
 unsigned int readSense(unsigned int channel) {
   return analogRead(senses[channel]);
+}
+
+void enableXtal() {
 }
 
 // Our analog inputs are
@@ -249,7 +252,7 @@ void setup()
   // we let all of them turn on.
   for (unsigned int i=0;i<4;i++) {
     if (default_disable[i]) {
-      digitalWrite(enables[i], 0);
+      digitalWrite(enables[i], 1);
       pinMode(enables[i], OUTPUT);
     } else {
       pinMode(enables[i], INPUT);
@@ -302,6 +305,9 @@ void setup()
   currentTime = millis();
   housekeepingTime = millis() + HOUSEKEEPING_PERIOD;
   upivsBitCount = 26;
+  
+  pinMode(LED0, OUTPUT);
+  digitalWrite(LED0, 0);
 }
 
 void loop()
@@ -345,7 +351,7 @@ void parseJsonInput() {
         if (setVal & (1<<i))
           pinMode(enables[i],INPUT);
         else {
-          digitalWrite(enables[i], 0);
+          digitalWrite(enables[i], 1);
           pinMode(enables[i], OUTPUT);
         }
       }
