@@ -190,7 +190,7 @@ void doHousekeeping() {
       Serial.print("{\"on\":[");
       count = 0;
       for (i=0;i<4;i++) {
-        if (digitalRead(enables[i])) {
+        if (!digitalRead(enables[i])) {
           if (count) Serial.print(",");
           Serial.print(i);
           count++;
