@@ -7,8 +7,8 @@
 #define CURRENT P4_4
 #define VIN_MON P4_5
 #define SERIAL_SELECT P2_1
-#define UPIVS_CLK P1_4
-#define UPIVS_SDO P1_5
+#define UPIVS_CLK P1_2
+#define UPIVS_SDO P1_3
 
 // Both of these have signatures to make sure they're valid.
 unsigned char *const default_disable = SEGMENT_B;
