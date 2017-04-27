@@ -152,7 +152,7 @@ void doVinReadout() {
       if (upivsBitCount == 16) {
         upivs_last_voltage = upivs_temp;
       }
-      if (upivsBitCount == 27) {
+      if (upivsBitCount == 26) {
         // Leave clock high, let it go to sleep.
         upivsTime = millis() + UPIVS_WAIT_PERIOD;
         upivsBitCount = 0;
