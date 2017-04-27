@@ -47,6 +47,8 @@ unsigned int last_voltage = 0;
 
 // It takes ~half a second to enter sleep mode. Wait double that.
 #define UPIVS_WAIT_PERIOD 1000
+// Wait a bit more after.
+#define UPIVS_AFTER_WAIT_PERIOD 10
 // After we wake up, we need to check for SDO low (data ready). Check quickly.
 #define UPIVS_CHECK_PERIOD 1
 // After that, the clock period is mainly set by the optocoupler, so set that
@@ -59,6 +61,7 @@ unsigned long upivsTime = 0;
 unsigned int upivsBitCount = 0;
 unsigned int upivs_temp = 0;
 unsigned int upivs_last_voltage = 0;
+unsigned int upivs_waiting = 0;
 
 unsigned int readVin() {
   return analogRead(VIN_MON);
@@ -164,6 +167,13 @@ void doVinReadout() {
   } else {
     if (upivsBitCount == 0) {
       if (digitalRead(UPIVS_SDO) == 1) {
+      	if (!upivs_waiting) {
+	   upivs_waiting = 1;
+	   upivsTime = millis() + UPIVS_AFTER_WAIT_PERIOD;
+	   return;
+	} else {
+	   upivs_waiting = 0;
+	}
         // Ready!
         digitalWrite(UPIVS_CLK, UPIVS_CLK_HIGH);
         upivsTime = millis() + UPIVS_BIT_PERIOD;
