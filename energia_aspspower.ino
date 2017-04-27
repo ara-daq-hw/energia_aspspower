@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include <MspFlash.h>
 
-#define VERSION_STRING "1.1.0"
+#define VERSION_STRING "1.1.1"
 
 #define CURRENT P4_4
 #define VIN_MON P4_5
