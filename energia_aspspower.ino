@@ -2,13 +2,15 @@
 #include <Wire.h>
 #include <MspFlash.h>
 
-#define VERSION_STRING "1.1.1"
+#define VERSION_STRING "1.2"
 
 #define CURRENT P4_4
 #define VIN_MON P4_5
+#define V12_MON P3_6
 #define SERIAL_SELECT P2_1
 #define UPIVS_CLK P1_2
 #define UPIVS_SDO P1_3
+#define PIN_BOARD_TYPE_SENSE P1_5
 
 // Both of these have signatures to make sure they're valid.
 unsigned char *const default_disable = SEGMENT_B;
@@ -19,9 +21,12 @@ int *const calib = (int *) SEGMENT_D;
 char __attribute__((section(".noinit"))) cmd_buffer[128];
 unsigned char cmd_buffer_ptr = 0;
 
-
-static const uint8_t enables[4] = { P4_0, P4_1, P4_2, P4_7 };
+#define NUM_SENSE_CHANNELS 4
+#define NUM_CHANNELS 8
+static const uint8_t enables[8] = { P4_0, P4_1, P4_2, P4_7, P1_5, P3_3, P3_0, P2_0 };
 static const int senses[4] = { P2_4, P2_2, P3_7, P4_6 };
+
+unsigned char __attribute__((section(".noinit"))) numEnableChannels;
 
 #define HOUSEKEEPING_PERIOD 1000
 unsigned long housekeepingTime = 0;
@@ -65,6 +70,10 @@ unsigned int upivs_waiting = 0;
 
 unsigned int readVin() {
   return analogRead(VIN_MON);
+}
+
+unsigned int read12Vin() {
+  return analogRead(V12_MON);
 }
 
 unsigned int readSense(unsigned int channel) {
@@ -199,7 +208,7 @@ void doHousekeeping() {
     case output_ON:
       Serial.print("{\"on\":[");
       count = 0;
-      for (i=0;i<4;i++) {
+      for (i=0;i<numEnableChannels;i++) {
         if (!digitalRead(enables[i])) {
           if (count) Serial.print(",");
           Serial.print(i);
@@ -216,12 +225,16 @@ void doHousekeeping() {
       Serial.print(analogRead(128+11));
       Serial.print(",");
       Serial.print(upivs_last_voltage);
+      if (numEnableChannels > 4) {
+        Serial.print(",");
+        Serial.print(read12Vin());        
+      }
       Serial.println("]}");
       housekeepingState = output_I;
       break;
     case output_I:
       Serial.print("{\"i\":[");
-      for (i=0;i<4;i++) {
+      for (i=0;i<NUM_SENSE_CHANNELS;i++) {
         if (i) Serial.print(",");
         Serial.print(current_measure[i]);
       }
@@ -258,15 +271,24 @@ void setup()
     Flash.write(default_disable, (unsigned char *) tmp, 64);
     err++;
   }
+
+  // What are we?
+  pinMode(PIN_BOARD_TYPE_SENSE, INPUT_PULLUP);
+  if (digitalRead(PIN_BOARD_TYPE_SENSE)) {
+    numEnableChannels = 4;
+  } else {
+    numEnableChannels = 8;
+  }
+
   // Add something here to grab data from info flash to determine if
   // we let all of them turn on.
-  for (unsigned int i=0;i<4;i++) {
+  for (unsigned int i=0;i<numEnableChannels;i++) {
     if (default_disable[i]) {
       digitalWrite(enables[i], 1);
-      pinMode(enables[i], OUTPUT);
     } else {
-      pinMode(enables[i], INPUT);
+      digitalWrite(enables[i], 0);
     }
+    pinMode(enables[i], OUTPUT);
   }
   // Switch P2_1 to go to 15V_SW1_SENSE
   pinMode(SERIAL_SELECT, OUTPUT);
@@ -278,11 +300,16 @@ void setup()
   pinMode(UPIVS_CLK, OUTPUT);
   digitalWrite(UPIVS_CLK, UPIVS_CLK_HIGH);  
   // Set up the OA.
-
+  // Disable the analog inputs on P2.2 (A2), P2.4 (A4), P3.7 (A7), P4.6 (A15), P2.3 (A3)
+  // P4.5 (A14), P4.3 (A12), and P4.4 (A13), and P3.6 (A6).
+  ADC10AE0 = (BIT2 | BIT3 | BIT4 | BIT6 | BIT7);
+  ADC10AE1 = (BIT7 | BIT6 | BIT5 | BIT4);
   // OA0 is just a unity-gain follower on VIN_MON.
   OA0CTL1 = (OAFC_2);
   // Slow slew, output to external pin A12.
-  OA0CTL0 = (OAPM_1) | (OAADC0) | (OAADC1);
+  // Also connect the negative input muxer to select input 1 as well.
+  // This should be unimportant.
+  OA0CTL0 = (OAN_3) | (OAP_3) | (OAPM_1) | (OAADC0) | (OAADC1);
   // OA1 is a general-purpose op-amp.
   OA1CTL1 = (OAFC_0);
   // start with channel 0.
@@ -295,14 +322,16 @@ void setup()
     Flash.write((unsigned char *) calib, (unsigned char *) tmp, 64);
     err++;
   }
+
   
   // Now boot.
   Serial.begin(9600);
   if (err)
-    Serial.println("{\"log\":\"initial boot\"}");
+    Serial.print("{\"log\":\"initial boot - ");
   else
-    Serial.println("{\"log\":\"reboot\"}");
-
+    Serial.print("{\"log\":\"reboot - ");
+  Serial.print(numEnableChannels);
+  Serial.println("ch\"}");
 
   Wire.begin();
   Wire.beginTransmission(0x4C);
@@ -356,14 +385,12 @@ void parseJsonInput() {
     unsigned char setMask = setArray[0];
     unsigned char setVal = setArray[1];
     unsigned int i;
-    for (i=0;i<4;i++) {
+    for (i=0;i<numEnableChannels;i++) {
       if (setMask & (1<<i)) {
         if (setVal & (1<<i))
-          pinMode(enables[i],INPUT);
-        else {
+          digitalWrite(enables[i], 0);
+        else
           digitalWrite(enables[i], 1);
-          pinMode(enables[i], OUTPUT);
-        }
       }
     }
   }
@@ -375,7 +402,7 @@ void parseJsonInput() {
     for (size_t i=0;i<disableArray.size();i++) {
       unsigned int ch;
       ch = disableArray[i];
-      if (ch<4) {
+      if (ch<numEnableChannels) {
         tmp_default[ch] = 1;
       }
     }
