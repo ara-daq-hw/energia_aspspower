@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include <MspFlash.h>
 
-#define VERSION_STRING "1.2"
+#define VERSION_STRING "1.3"
 
 #define CURRENT P4_4
 #define VIN_MON P4_5
@@ -419,6 +419,27 @@ void parseJsonInput() {
     Serial.print(VERSION_STRING);
     Serial.println("\"}");
   }
+  if (root.containsKey("dcocal")) {
+    unsigned int idx = root["dcocal"];
+    if (idx < 64) {
+       unsigned char *infoa = (unsigned char *) 0x1080;
+       infoa += idx;
+       Serial.print("{\"dcocal\":\"");
+       Serial.print(*infoa);
+       Serial.println("\"}");
+    }
+  }
+  if (root.containsKey("passwd")) {
+    unsigned int idx = root["passwd"];
+    if (idx < 32) {
+       unsigned char *pwd = (unsigned char *) 0xFFE0;
+       pwd += idx;
+       Serial.print("{\"passwd\":\"");
+       Serial.print(*pwd);
+       Serial.println("\"}");
+    }
+  }
+       
   if (root.containsKey("calib")) {
     int tmp_calib[32];
     int val;
