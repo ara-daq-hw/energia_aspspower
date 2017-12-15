@@ -397,7 +397,7 @@ void parseJsonInput() {
   if (root.containsKey("disable")) {
     unsigned char tmp_default[64];
     JsonArray& disableArray = root["disable"];
-    memcpy(tmp_default, disable_default, sizeof(tmp_default));
+    memcpy(tmp_default, default_disable, sizeof(tmp_default));
     tmp_default[63] = DEFAULT_DISABLE_SIGNATURE;
     for (size_t i=0;i<disableArray.size();i++) {
       unsigned int ch;
@@ -412,7 +412,7 @@ void parseJsonInput() {
   if (root.containsKey("enable")) {
     unsigned char tmp_default[64];
     JsonArray& enableArray = root["enable"];
-    memcpy(tmp_default, disable_default, sizeof(tmp_default));
+    memcpy(tmp_default, default_disable, sizeof(tmp_default));
     tmp_default[63] = DEFAULT_DISABLE_SIGNATURE;
     for (size_t i=0;i<enableArray.size();i++) {
       unsigned int ch;
