@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include <MspFlash.h>
 
-#define VERSION_STRING "1.3"
+#define VERSION_STRING "1.4"
 
 #define CURRENT P4_4
 #define VIN_MON P4_5
@@ -397,7 +397,7 @@ void parseJsonInput() {
   if (root.containsKey("disable")) {
     unsigned char tmp_default[64];
     JsonArray& disableArray = root["disable"];
-    memset(tmp_default, 0, sizeof(tmp_default));
+    memcpy(tmp_default, disable_default, sizeof(tmp_default));
     tmp_default[63] = DEFAULT_DISABLE_SIGNATURE;
     for (size_t i=0;i<disableArray.size();i++) {
       unsigned int ch;
@@ -409,6 +409,22 @@ void parseJsonInput() {
     Flash.erase(SEGMENT_B);
     Flash.write(SEGMENT_B, tmp_default, sizeof(tmp_default));
   }
+  if (root.containsKey("enable")) {
+    unsigned char tmp_default[64];
+    JsonArray& enableArray = root["enable"];
+    memcpy(tmp_default, disable_default, sizeof(tmp_default));
+    tmp_default[63] = DEFAULT_DISABLE_SIGNATURE;
+    for (size_t i=0;i<enableArray.size();i++) {
+      unsigned int ch;
+      ch = enableArray[i];
+      if (ch<numEnableChannels) {
+        tmp_default[ch] = 0;
+      }
+    }
+    Flash.erase(SEGMENT_B);
+    Flash.write(SEGMENT_B, tmp_default, sizeof(tmp_default));
+  }    
+  
   if (root.containsKey("sn")) {
     Serial.print("{\"sn\":");
     Serial.print(calib[30]);
