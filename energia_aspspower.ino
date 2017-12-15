@@ -422,7 +422,7 @@ void parseJsonInput() {
   if (root.containsKey("dcocal")) {
     unsigned int idx = root["dcocal"];
     if (idx < 64) {
-       unsigned char *infoa = (unsigned char *) 0x1080;
+       unsigned char *infoa = (unsigned char *) 0x10C0;
        infoa += idx;
        Serial.print("{\"dcocal\":\"");
        Serial.print(*infoa);
